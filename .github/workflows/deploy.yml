@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - claude/deploy-vercel-jY0qz
+      - claude/major-updates-jY0qz
       - main
 
 jobs:
