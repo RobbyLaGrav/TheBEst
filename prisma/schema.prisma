@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ─── Users & Auth ─────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String   @default("")
+  passwordHash  String
+  emailVerified Boolean  @default(false)
+  verifyToken   String?
+  resetToken    String?
+  resetExpires  DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  settings      UserSettings?
+  sessions      Session[]
+  notes         Note[]
+  ideas         Idea[]
+  businessIdeas BusinessIdea[]
+  tasks         Task[]
+  habits        Habit[]
+  vaultNotes    VaultNote[]
+  goals         Goal[]
+  inboxItems    InboxItem[]
+  emailPrefs    EmailPreferences?
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+model UserSettings {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  accentColor     String  @default("green")
+  themeMode       String  @default("dark")
+  fontSize        String  @default("normal")
+  fontFamily      String  @default("system")
+  spacing         String  @default("normal")
+  sidebarCollapsed Boolean @default(false)
+  dashboardLayout String? // JSON string
+  customColors    String? // JSON string
+  vaultPin        String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailPreferences {
+  id               String  @id @default(cuid())
+  userId           String  @unique
+  dailyDigest      Boolean @default(true)
+  dailyDigestTime  String  @default("08:00")
+  weeklyReport     Boolean @default(false)
+  taskReminders    Boolean @default(true)
+  goalReminders    Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Content Types ────────────────────────────────────────
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  content   String   @default("")
+  tags      String   @default("[]") // JSON array
+  pinned    Boolean  @default(false)
+  starred   Boolean  @default(false)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, archived])
+}
+
+model Idea {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String   @default("")
+  heat        Int      @default(3)
+  status      String   @default("Raw") // Raw, Developing, Shelved, Launched
+  category    String   @default("General")
+  color       String   @default("#22c55e")
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+}
+
+model BusinessIdea {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  problem   String   @default("")
+  audience  String   @default("")
+  revenue   String   @default("")
+  nextSteps String   @default("[\"\",\"\",\"\"]") // JSON array
+  resources String   @default("")
+  viability Int      @default(5)
+  stage     String   @default("Concept") // Concept, Validating, Building, Live
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, stage])
+}
+
+model Task {
+  id           String    @id @default(cuid())
+  userId       String
+  title        String
+  content      String    @default("")
+  completed    Boolean   @default(false)
+  completedAt  DateTime?
+  priority     String    @default("Chill") // Chill, Important, URGENT
+  dueDate      String?
+  dueTime      String?
+  recurring    String?   // daily, weekly, monthly
+  recurrenceEnd String?
+  snoozedUntil String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, completed])
+  @@index([userId, dueDate])
+}
+
+model Habit {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  frequency      String   @default("daily") // daily, weekly
+  completedDates String   @default("[]") // JSON array of ISO date strings
+  color          String   @default("#22c55e")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VaultNote {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  content   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Goal {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String   @default("")
+  type        String   @default("90day") // 90day, yearly, life
+  progress    Int      @default(0)
+  milestones  String   @default("[]") // JSON array
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, type])
+}
+
+model InboxItem {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   @default("text") // text, voice, photo
+  content   String
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, processed])
+}

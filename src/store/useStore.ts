@@ -3,7 +3,8 @@ import { persist } from "zustand/middleware";
 import { v4 as uuid } from "uuid";
 
 // ─── Types ───────────────────────────────────────────────────
-export type AccentColor = "green" | "blue" | "coral" | "purple" | "amber";
+export type AccentColor = "green" | "blue" | "coral" | "purple" | "amber" | "rose" | "cyan" | "custom";
+export type ThemeMode = "dark" | "light" | "system";
 
 export interface Note {
   id: string;
@@ -22,7 +23,7 @@ export interface Idea {
   id: string;
   title: string;
   description: string;
-  heat: number; // 1-5
+  heat: number;
   status: IdeaStatus;
   category: string;
   color: string;
@@ -40,7 +41,7 @@ export interface BusinessIdea {
   revenue: string;
   nextSteps: string[];
   resources: string;
-  viability: number; // 1-10
+  viability: number;
   stage: BusinessStage;
   createdAt: string;
   updatedAt: string;
@@ -50,10 +51,14 @@ export type TaskPriority = "Chill" | "Important" | "URGENT";
 export interface Task {
   id: string;
   title: string;
+  content?: string;
   completed: boolean;
+  completedAt?: string | null;
   priority: TaskPriority;
   dueDate: string | null;
-  recurring: string | null; // daily, weekly, monthly
+  dueTime?: string | null;
+  recurring: string | null;
+  recurrenceEnd?: string | null;
   snoozedUntil: string | null;
   createdAt: string;
 }
@@ -62,7 +67,7 @@ export interface Habit {
   id: string;
   name: string;
   frequency: "daily" | "weekly";
-  completedDates: string[]; // ISO date strings
+  completedDates: string[];
   createdAt: string;
   color: string;
 }
@@ -80,7 +85,7 @@ export interface Goal {
   title: string;
   description: string;
   type: "90day" | "yearly" | "life";
-  progress: number; // 0-100
+  progress: number;
   milestones: { text: string; done: boolean }[];
   imageUrl: string | null;
   createdAt: string;
@@ -99,8 +104,18 @@ export interface InboxItem {
 interface AppState {
   // Settings
   accentColor: AccentColor;
+  themeMode: ThemeMode;
+  fontSize: "small" | "normal" | "large";
+  fontFamily: "system" | "serif" | "mono";
+  spacing: "compact" | "normal" | "spacious";
+  customColors: { accent: string; accentDim: string; accentGlow: string } | null;
   vaultPin: string | null;
   vaultUnlocked: boolean;
+
+  // Sync
+  isServerMode: boolean;
+  isSyncing: boolean;
+  lastSyncAt: string | null;
 
   // Data
   notes: Note[];
@@ -112,8 +127,17 @@ interface AppState {
   goals: Goal[];
   inbox: InboxItem[];
 
+  // Sync actions
+  setServerMode: (mode: boolean) => void;
+  syncFromServer: () => Promise<void>;
+
   // Settings actions
   setAccentColor: (c: AccentColor) => void;
+  setThemeMode: (m: ThemeMode) => void;
+  setFontSize: (s: "small" | "normal" | "large") => void;
+  setFontFamily: (f: "system" | "serif" | "mono") => void;
+  setSpacing: (s: "compact" | "normal" | "spacious") => void;
+  setCustomColors: (c: { accent: string; accentDim: string; accentGlow: string } | null) => void;
   setVaultPin: (pin: string) => void;
   unlockVault: () => void;
   lockVault: () => void;
@@ -163,13 +187,38 @@ interface AppState {
 
 const IDEA_COLORS = ["#22c55e", "#3b82f6", "#f97316", "#a855f7", "#ef4444", "#eab308", "#06b6d4"];
 
+// Helper for server sync
+async function apiCall(endpoint: string, method: string, body?: unknown) {
+  try {
+    const res = await fetch(`/api/${endpoint}`, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.ok) return res.json();
+  } catch (e) {
+    console.error(`API call failed: ${method} ${endpoint}`, e);
+  }
+  return null;
+}
+
 export const useStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // Settings
       accentColor: "green",
+      themeMode: "dark",
+      fontSize: "normal",
+      fontFamily: "system",
+      spacing: "normal",
+      customColors: null,
       vaultPin: null,
       vaultUnlocked: false,
+
+      // Sync
+      isServerMode: false,
+      isSyncing: false,
+      lastSyncAt: null,
 
       // Data
       notes: [],
@@ -181,236 +230,278 @@ export const useStore = create<AppState>()(
       goals: [],
       inbox: [],
 
+      // Sync actions
+      setServerMode: (mode) => set({ isServerMode: mode }),
+
+      syncFromServer: async () => {
+        set({ isSyncing: true });
+        try {
+          const [notes, ideas, businessIdeas, tasks, habits, vaultNotes, goals, inbox] = await Promise.all([
+            apiCall("notes", "GET"),
+            apiCall("ideas", "GET"),
+            apiCall("business-ideas", "GET"),
+            apiCall("tasks", "GET"),
+            apiCall("habits", "GET"),
+            apiCall("vault-notes", "GET"),
+            apiCall("goals", "GET"),
+            apiCall("inbox", "GET"),
+          ]);
+
+          set({
+            notes: notes || [],
+            ideas: ideas || [],
+            businessIdeas: businessIdeas || [],
+            tasks: tasks || [],
+            habits: habits || [],
+            vaultNotes: vaultNotes || [],
+            goals: goals || [],
+            inbox: inbox || [],
+            lastSyncAt: new Date().toISOString(),
+            isSyncing: false,
+          });
+        } catch {
+          set({ isSyncing: false });
+        }
+      },
+
       // Settings actions
-      setAccentColor: (c) => set({ accentColor: c }),
-      setVaultPin: (pin) => set({ vaultPin: pin }),
+      setAccentColor: (c) => {
+        set({ accentColor: c });
+        if (get().isServerMode) apiCall("user/settings", "PUT", { accentColor: c });
+      },
+      setThemeMode: (m) => {
+        set({ themeMode: m });
+        if (get().isServerMode) apiCall("user/settings", "PUT", { themeMode: m });
+      },
+      setFontSize: (s) => {
+        set({ fontSize: s });
+        if (get().isServerMode) apiCall("user/settings", "PUT", { fontSize: s });
+      },
+      setFontFamily: (f) => {
+        set({ fontFamily: f });
+        if (get().isServerMode) apiCall("user/settings", "PUT", { fontFamily: f });
+      },
+      setSpacing: (s) => {
+        set({ spacing: s });
+        if (get().isServerMode) apiCall("user/settings", "PUT", { spacing: s });
+      },
+      setCustomColors: (c) => {
+        set({ customColors: c });
+        if (get().isServerMode) apiCall("user/settings", "PUT", { customColors: c ? JSON.stringify(c) : null });
+      },
+      setVaultPin: (pin) => {
+        set({ vaultPin: pin });
+        if (get().isServerMode) apiCall("user/settings", "PUT", { vaultPin: pin });
+      },
       unlockVault: () => set({ vaultUnlocked: true }),
       lockVault: () => set({ vaultUnlocked: false }),
 
       // Notes
-      addNote: (title, content, tags = []) =>
+      addNote: (title, content, tags = []) => {
+        const id = uuid();
+        const now = new Date().toISOString();
+        const note: Note = { id, title, content, tags, pinned: false, starred: false, archived: false, createdAt: now, updatedAt: now };
+        set((s) => ({ notes: [note, ...s.notes] }));
+        if (get().isServerMode) {
+          apiCall("notes", "POST", { title, content, tags }).then((res) => {
+            if (res) set((s) => ({ notes: s.notes.map((n) => (n.id === id ? { ...res } : n)) }));
+          });
+        }
+      },
+      updateNote: (id, updates) => {
         set((s) => ({
-          notes: [
-            {
-              id: uuid(),
-              title,
-              content,
-              tags,
-              pinned: false,
-              starred: false,
-              archived: false,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            ...s.notes,
-          ],
-        })),
-      updateNote: (id, updates) =>
-        set((s) => ({
-          notes: s.notes.map((n) =>
-            n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n
-          ),
-        })),
-      deleteNote: (id) => set((s) => ({ notes: s.notes.filter((n) => n.id !== id) })),
+          notes: s.notes.map((n) => (n.id === id ? { ...n, ...updates, updatedAt: new Date().toISOString() } : n)),
+        }));
+        if (get().isServerMode) apiCall("notes", "PUT", { id, ...updates });
+      },
+      deleteNote: (id) => {
+        set((s) => ({ notes: s.notes.filter((n) => n.id !== id) }));
+        if (get().isServerMode) apiCall("notes", "DELETE", { id });
+      },
 
       // Ideas
-      addIdea: (title, description, category = "General") =>
+      addIdea: (title, description, category = "General") => {
+        const id = uuid();
+        const now = new Date().toISOString();
+        const idea: Idea = {
+          id, title, description, heat: 3, status: "Raw", category,
+          color: IDEA_COLORS[get().ideas.length % IDEA_COLORS.length],
+          archived: false, createdAt: now, updatedAt: now,
+        };
+        set((s) => ({ ideas: [idea, ...s.ideas] }));
+        if (get().isServerMode) {
+          apiCall("ideas", "POST", { title, description, category, color: idea.color }).then((res) => {
+            if (res) set((s) => ({ ideas: s.ideas.map((i) => (i.id === id ? { ...res } : i)) }));
+          });
+        }
+      },
+      updateIdea: (id, updates) => {
         set((s) => ({
-          ideas: [
-            {
-              id: uuid(),
-              title,
-              description,
-              heat: 3,
-              status: "Raw" as IdeaStatus,
-              category,
-              color: IDEA_COLORS[s.ideas.length % IDEA_COLORS.length],
-              archived: false,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            ...s.ideas,
-          ],
-        })),
-      updateIdea: (id, updates) =>
+          ideas: s.ideas.map((i) => (i.id === id ? { ...i, ...updates, updatedAt: new Date().toISOString() } : i)),
+        }));
+        if (get().isServerMode) apiCall("ideas", "PUT", { id, ...updates });
+      },
+      deleteIdea: (id) => {
+        set((s) => ({ ideas: s.ideas.filter((i) => i.id !== id) }));
+        if (get().isServerMode) apiCall("ideas", "DELETE", { id });
+      },
+      promoteIdeaToBusiness: (id) => {
+        const idea = get().ideas.find((i) => i.id === id);
+        if (!idea) return;
+        const bizId = uuid();
+        const now = new Date().toISOString();
         set((s) => ({
-          ideas: s.ideas.map((i) =>
-            i.id === id ? { ...i, ...updates, updatedAt: new Date().toISOString() } : i
-          ),
-        })),
-      deleteIdea: (id) => set((s) => ({ ideas: s.ideas.filter((i) => i.id !== id) })),
-      promoteIdeaToBusiness: (id) =>
-        set((s) => {
-          const idea = s.ideas.find((i) => i.id === id);
-          if (!idea) return s;
-          return {
-            ideas: s.ideas.filter((i) => i.id !== id),
-            businessIdeas: [
-              {
-                id: uuid(),
-                title: idea.title,
-                problem: idea.description,
-                audience: "",
-                revenue: "",
-                nextSteps: ["", "", ""],
-                resources: "",
-                viability: 5,
-                stage: "Concept" as BusinessStage,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              },
-              ...s.businessIdeas,
-            ],
-          };
-        }),
-
-      // Business Ideas
-      addBusinessIdea: (title) =>
-        set((s) => ({
+          ideas: s.ideas.filter((i) => i.id !== id),
           businessIdeas: [
-            {
-              id: uuid(),
-              title,
-              problem: "",
-              audience: "",
-              revenue: "",
-              nextSteps: ["", "", ""],
-              resources: "",
-              viability: 5,
-              stage: "Concept" as BusinessStage,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
+            { id: bizId, title: idea.title, problem: idea.description, audience: "", revenue: "", nextSteps: ["", "", ""], resources: "", viability: 5, stage: "Concept" as BusinessStage, createdAt: now, updatedAt: now },
             ...s.businessIdeas,
           ],
-        })),
-      updateBusinessIdea: (id, updates) =>
+        }));
+        if (get().isServerMode) {
+          apiCall("ideas", "DELETE", { id });
+          apiCall("business-ideas", "POST", { title: idea.title, problem: idea.description });
+        }
+      },
+
+      // Business Ideas
+      addBusinessIdea: (title) => {
+        const id = uuid();
+        const now = new Date().toISOString();
+        const biz: BusinessIdea = { id, title, problem: "", audience: "", revenue: "", nextSteps: ["", "", ""], resources: "", viability: 5, stage: "Concept", createdAt: now, updatedAt: now };
+        set((s) => ({ businessIdeas: [biz, ...s.businessIdeas] }));
+        if (get().isServerMode) {
+          apiCall("business-ideas", "POST", { title }).then((res) => {
+            if (res) set((s) => ({ businessIdeas: s.businessIdeas.map((b) => (b.id === id ? { ...res } : b)) }));
+          });
+        }
+      },
+      updateBusinessIdea: (id, updates) => {
         set((s) => ({
-          businessIdeas: s.businessIdeas.map((b) =>
-            b.id === id ? { ...b, ...updates, updatedAt: new Date().toISOString() } : b
-          ),
-        })),
-      deleteBusinessIdea: (id) =>
-        set((s) => ({ businessIdeas: s.businessIdeas.filter((b) => b.id !== id) })),
+          businessIdeas: s.businessIdeas.map((b) => (b.id === id ? { ...b, ...updates, updatedAt: new Date().toISOString() } : b)),
+        }));
+        if (get().isServerMode) apiCall("business-ideas", "PUT", { id, ...updates });
+      },
+      deleteBusinessIdea: (id) => {
+        set((s) => ({ businessIdeas: s.businessIdeas.filter((b) => b.id !== id) }));
+        if (get().isServerMode) apiCall("business-ideas", "DELETE", { id });
+      },
 
       // Tasks
-      addTask: (title, priority = "Chill", dueDate = null) =>
+      addTask: (title, priority = "Chill", dueDate = null) => {
+        const id = uuid();
+        const task: Task = { id, title, completed: false, priority, dueDate, recurring: null, snoozedUntil: null, createdAt: new Date().toISOString() };
+        set((s) => ({ tasks: [task, ...s.tasks] }));
+        if (get().isServerMode) {
+          apiCall("tasks", "POST", { title, priority, dueDate }).then((res) => {
+            if (res) set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...res } : t)) }));
+          });
+        }
+      },
+      updateTask: (id, updates) => {
+        set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...updates } : t)) }));
+        if (get().isServerMode) apiCall("tasks", "PUT", { id, ...updates });
+      },
+      toggleTask: (id) => {
+        const task = get().tasks.find((t) => t.id === id);
+        if (!task) return;
+        const completed = !task.completed;
         set((s) => ({
-          tasks: [
-            {
-              id: uuid(),
-              title,
-              completed: false,
-              priority,
-              dueDate,
-              recurring: null,
-              snoozedUntil: null,
-              createdAt: new Date().toISOString(),
-            },
-            ...s.tasks,
-          ],
-        })),
-      updateTask: (id, updates) =>
-        set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...updates } : t)) })),
-      toggleTask: (id) =>
-        set((s) => ({
-          tasks: s.tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
-        })),
-      deleteTask: (id) => set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) })),
+          tasks: s.tasks.map((t) => (t.id === id ? { ...t, completed, completedAt: completed ? new Date().toISOString() : null } : t)),
+        }));
+        if (get().isServerMode) apiCall("tasks", "PUT", { id, completed });
+      },
+      deleteTask: (id) => {
+        set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }));
+        if (get().isServerMode) apiCall("tasks", "DELETE", { id });
+      },
 
       // Habits
-      addHabit: (name, frequency = "daily") =>
+      addHabit: (name, frequency = "daily") => {
+        const id = uuid();
+        const habit: Habit = { id, name, frequency, completedDates: [], createdAt: new Date().toISOString(), color: IDEA_COLORS[get().habits.length % IDEA_COLORS.length] };
+        set((s) => ({ habits: [habit, ...s.habits] }));
+        if (get().isServerMode) {
+          apiCall("habits", "POST", { name, frequency, color: habit.color }).then((res) => {
+            if (res) set((s) => ({ habits: s.habits.map((h) => (h.id === id ? { ...res } : h)) }));
+          });
+        }
+      },
+      toggleHabitDate: (id, date) => {
+        const habit = get().habits.find((h) => h.id === id);
+        if (!habit) return;
+        const completedDates = habit.completedDates.includes(date)
+          ? habit.completedDates.filter((d) => d !== date)
+          : [...habit.completedDates, date];
         set((s) => ({
-          habits: [
-            {
-              id: uuid(),
-              name,
-              frequency,
-              completedDates: [],
-              createdAt: new Date().toISOString(),
-              color: IDEA_COLORS[s.habits.length % IDEA_COLORS.length],
-            },
-            ...s.habits,
-          ],
-        })),
-      toggleHabitDate: (id, date) =>
-        set((s) => ({
-          habits: s.habits.map((h) =>
-            h.id === id
-              ? {
-                  ...h,
-                  completedDates: h.completedDates.includes(date)
-                    ? h.completedDates.filter((d) => d !== date)
-                    : [...h.completedDates, date],
-                }
-              : h
-          ),
-        })),
-      deleteHabit: (id) => set((s) => ({ habits: s.habits.filter((h) => h.id !== id) })),
+          habits: s.habits.map((h) => (h.id === id ? { ...h, completedDates } : h)),
+        }));
+        if (get().isServerMode) apiCall("habits", "PUT", { id, completedDates });
+      },
+      deleteHabit: (id) => {
+        set((s) => ({ habits: s.habits.filter((h) => h.id !== id) }));
+        if (get().isServerMode) apiCall("habits", "DELETE", { id });
+      },
 
       // Vault
-      addVaultNote: (title, content) =>
+      addVaultNote: (title, content) => {
+        const id = uuid();
+        const now = new Date().toISOString();
+        set((s) => ({ vaultNotes: [{ id, title, content, createdAt: now, updatedAt: now }, ...s.vaultNotes] }));
+        if (get().isServerMode) {
+          apiCall("vault-notes", "POST", { title, content }).then((res) => {
+            if (res) set((s) => ({ vaultNotes: s.vaultNotes.map((v) => (v.id === id ? { ...res } : v)) }));
+          });
+        }
+      },
+      updateVaultNote: (id, updates) => {
         set((s) => ({
-          vaultNotes: [
-            {
-              id: uuid(),
-              title,
-              content,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-            ...s.vaultNotes,
-          ],
-        })),
-      updateVaultNote: (id, updates) =>
-        set((s) => ({
-          vaultNotes: s.vaultNotes.map((v) =>
-            v.id === id ? { ...v, ...updates, updatedAt: new Date().toISOString() } : v
-          ),
-        })),
-      deleteVaultNote: (id) =>
-        set((s) => ({ vaultNotes: s.vaultNotes.filter((v) => v.id !== id) })),
+          vaultNotes: s.vaultNotes.map((v) => (v.id === id ? { ...v, ...updates, updatedAt: new Date().toISOString() } : v)),
+        }));
+        if (get().isServerMode) apiCall("vault-notes", "PUT", { id, ...updates });
+      },
+      deleteVaultNote: (id) => {
+        set((s) => ({ vaultNotes: s.vaultNotes.filter((v) => v.id !== id) }));
+        if (get().isServerMode) apiCall("vault-notes", "DELETE", { id });
+      },
 
       // Goals
-      addGoal: (title, type) =>
-        set((s) => ({
-          goals: [
-            {
-              id: uuid(),
-              title,
-              description: "",
-              type,
-              progress: 0,
-              milestones: [],
-              imageUrl: null,
-              createdAt: new Date().toISOString(),
-            },
-            ...s.goals,
-          ],
-        })),
-      updateGoal: (id, updates) =>
-        set((s) => ({ goals: s.goals.map((g) => (g.id === id ? { ...g, ...updates } : g)) })),
-      deleteGoal: (id) => set((s) => ({ goals: s.goals.filter((g) => g.id !== id) })),
+      addGoal: (title, type) => {
+        const id = uuid();
+        const goal: Goal = { id, title, description: "", type, progress: 0, milestones: [], imageUrl: null, createdAt: new Date().toISOString() };
+        set((s) => ({ goals: [goal, ...s.goals] }));
+        if (get().isServerMode) {
+          apiCall("goals", "POST", { title, type }).then((res) => {
+            if (res) set((s) => ({ goals: s.goals.map((g) => (g.id === id ? { ...res } : g)) }));
+          });
+        }
+      },
+      updateGoal: (id, updates) => {
+        set((s) => ({ goals: s.goals.map((g) => (g.id === id ? { ...g, ...updates } : g)) }));
+        if (get().isServerMode) apiCall("goals", "PUT", { id, ...updates });
+      },
+      deleteGoal: (id) => {
+        set((s) => ({ goals: s.goals.filter((g) => g.id !== id) }));
+        if (get().isServerMode) apiCall("goals", "DELETE", { id });
+      },
 
       // Inbox
-      addInboxItem: (content, type = "text") =>
-        set((s) => ({
-          inbox: [
-            {
-              id: uuid(),
-              type,
-              content,
-              processed: false,
-              createdAt: new Date().toISOString(),
-            },
-            ...s.inbox,
-          ],
-        })),
-      processInboxItem: (id) =>
-        set((s) => ({
-          inbox: s.inbox.map((i) => (i.id === id ? { ...i, processed: true } : i)),
-        })),
-      deleteInboxItem: (id) => set((s) => ({ inbox: s.inbox.filter((i) => i.id !== id) })),
+      addInboxItem: (content, type = "text") => {
+        const id = uuid();
+        set((s) => ({ inbox: [{ id, type, content, processed: false, createdAt: new Date().toISOString() }, ...s.inbox] }));
+        if (get().isServerMode) {
+          apiCall("inbox", "POST", { content, type }).then((res) => {
+            if (res) set((s) => ({ inbox: s.inbox.map((i) => (i.id === id ? { ...res } : i)) }));
+          });
+        }
+      },
+      processInboxItem: (id) => {
+        set((s) => ({ inbox: s.inbox.map((i) => (i.id === id ? { ...i, processed: true } : i)) }));
+        if (get().isServerMode) apiCall("inbox", "PUT", { id, processed: true });
+      },
+      deleteInboxItem: (id) => {
+        set((s) => ({ inbox: s.inbox.filter((i) => i.id !== id) }));
+        if (get().isServerMode) apiCall("inbox", "DELETE", { id });
+      },
     }),
     {
       name: "mindvault-storage",
