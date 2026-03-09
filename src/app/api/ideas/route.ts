@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/api-helpers";
 import { ideaSchema } from "@/lib/validations";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return withAuth(async (userId) => {
     const ideas = await prisma.idea.findMany({ where: { userId }, orderBy: { updatedAt: "desc" } });

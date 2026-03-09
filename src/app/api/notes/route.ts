@@ -3,13 +3,15 @@ import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/api-helpers";
 import { noteSchema } from "@/lib/validations";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return withAuth(async (userId) => {
     const notes = await prisma.note.findMany({
       where: { userId },
       orderBy: { updatedAt: "desc" },
     });
-    return NextResponse.json(notes.map((n) => ({ ...n, tags: JSON.parse(n.tags) })));
+    return NextResponse.json(notes.map((n: any) => ({ ...n, tags: JSON.parse(n.tags) })));
   });
 }
 

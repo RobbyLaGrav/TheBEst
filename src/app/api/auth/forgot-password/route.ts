@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { generateVerifyToken } from "@/lib/auth";
 import { sendPasswordResetEmail } from "@/lib/email";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
     const { email } = await req.json();

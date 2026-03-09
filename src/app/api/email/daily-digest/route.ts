@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { sendDailyDigestEmail } from "@/lib/email";
 
+export const dynamic = "force-dynamic";
+
 // This endpoint can be called by a cron job (e.g., Vercel Cron)
 export async function POST(req: Request) {
   try {
@@ -31,23 +33,23 @@ export async function POST(req: Request) {
 
     for (const user of users) {
       const overdueTasks = user.tasks
-        .filter((t) => !t.completed && t.dueDate && t.dueDate < today)
-        .map((t) => ({ title: t.title, priority: t.priority, dueDate: t.dueDate! }));
+        .filter((t: any) => !t.completed && t.dueDate && t.dueDate < today)
+        .map((t: any) => ({ title: t.title, priority: t.priority, dueDate: t.dueDate! }));
 
       const todayTasks = user.tasks
-        .filter((t) => !t.completed && t.dueDate === today)
-        .map((t) => ({ title: t.title, priority: t.priority }));
+        .filter((t: any) => !t.completed && t.dueDate === today)
+        .map((t: any) => ({ title: t.title, priority: t.priority }));
 
       const upcomingTasks = user.tasks
-        .filter((t) => !t.completed && t.dueDate && t.dueDate > today && t.dueDate <= weekFromNow)
-        .map((t) => ({ title: t.title, priority: t.priority, dueDate: t.dueDate! }));
+        .filter((t: any) => !t.completed && t.dueDate && t.dueDate > today && t.dueDate <= weekFromNow)
+        .map((t: any) => ({ title: t.title, priority: t.priority, dueDate: t.dueDate! }));
 
-      const habitsToday = user.habits.map((h) => {
+      const habitsToday = user.habits.map((h: any) => {
         const completedDates: string[] = JSON.parse(h.completedDates);
         return { name: h.name, completed: completedDates.includes(today) };
       });
 
-      const goalProgress = user.goals.map((g) => ({
+      const goalProgress = user.goals.map((g: any) => ({
         title: g.title,
         progress: g.progress,
       }));

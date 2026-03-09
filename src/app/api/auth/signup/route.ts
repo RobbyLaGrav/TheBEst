@@ -4,6 +4,8 @@ import { hashPassword, createSession, generateVerifyToken } from "@/lib/auth";
 import { signupSchema } from "@/lib/validations";
 import { sendVerificationEmail } from "@/lib/email";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();

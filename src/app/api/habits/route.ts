@@ -3,10 +3,12 @@ import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/api-helpers";
 import { habitSchema } from "@/lib/validations";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return withAuth(async (userId) => {
     const habits = await prisma.habit.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
-    return NextResponse.json(habits.map((h) => ({ ...h, completedDates: JSON.parse(h.completedDates) })));
+    return NextResponse.json(habits.map((h: any) => ({ ...h, completedDates: JSON.parse(h.completedDates) })));
   });
 }
 

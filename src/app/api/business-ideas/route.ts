@@ -3,10 +3,12 @@ import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/api-helpers";
 import { businessIdeaSchema } from "@/lib/validations";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return withAuth(async (userId) => {
     const ideas = await prisma.businessIdea.findMany({ where: { userId }, orderBy: { updatedAt: "desc" } });
-    return NextResponse.json(ideas.map((b) => ({ ...b, nextSteps: JSON.parse(b.nextSteps) })));
+    return NextResponse.json(ideas.map((b: any) => ({ ...b, nextSteps: JSON.parse(b.nextSteps) })));
   });
 }
 

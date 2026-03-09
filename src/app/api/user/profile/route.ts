@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/api-helpers";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export async function PUT(req: Request) {
   return withAuth(async (userId) => {
     const { name, email, currentPassword, newPassword } = await req.json();

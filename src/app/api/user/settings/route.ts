@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/api-helpers";
 import { settingsSchema } from "@/lib/validations";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return withAuth(async (userId) => {
     const settings = await prisma.userSettings.findUnique({ where: { userId } });

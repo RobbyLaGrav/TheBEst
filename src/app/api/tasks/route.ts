@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/api-helpers";
 import { taskSchema } from "@/lib/validations";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return withAuth(async (userId) => {
     const tasks = await prisma.task.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });

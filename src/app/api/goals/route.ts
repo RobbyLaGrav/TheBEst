@@ -3,10 +3,12 @@ import { prisma } from "@/lib/db";
 import { withAuth } from "@/lib/api-helpers";
 import { goalSchema } from "@/lib/validations";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return withAuth(async (userId) => {
     const goals = await prisma.goal.findMany({ where: { userId }, orderBy: { createdAt: "desc" } });
-    return NextResponse.json(goals.map((g) => ({ ...g, milestones: JSON.parse(g.milestones) })));
+    return NextResponse.json(goals.map((g: any) => ({ ...g, milestones: JSON.parse(g.milestones) })));
   });
 }
 
