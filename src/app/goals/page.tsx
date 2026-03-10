@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useStore, Goal } from "@/store/useStore";
 import { motion, AnimatePresence } from "framer-motion";
+import CircleCheckbox from "@/components/ui/CircleCheckbox";
 
 const TYPE_LABELS: Record<Goal["type"], string> = {
   "90day": "90 Day",
@@ -56,16 +57,16 @@ export default function GoalsPage() {
 
   return (
     <div className="max-w-3xl">
-      <div className="flex items-center justify-between mb-6">
+      <motion.div className="flex items-center justify-between mb-6" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">🎯 Goals</h1>
+          <h1 className="text-3xl font-bold tracking-tight">🎯 Goals</h1>
           <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{goals.length} goals set</p>
         </div>
         <button onClick={() => setShowForm(true)}
           className="px-4 py-2 rounded-xl text-sm font-semibold" style={{ background: "var(--accent)", color: "#000" }}>
           + New Goal
         </button>
-      </div>
+      </motion.div>
 
       {/* Form */}
       <AnimatePresence>
@@ -75,8 +76,7 @@ export default function GoalsPage() {
             style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
             onClick={() => setShowForm(false)}>
             <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="w-full max-w-md rounded-2xl p-6"
-              style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}
+              className="w-full max-w-md card-modern"
               onClick={(e) => e.stopPropagation()}>
               <h3 className="text-lg font-semibold mb-4">New Goal</h3>
               <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What's the goal?" autoFocus
@@ -110,10 +110,7 @@ export default function GoalsPage() {
       {/* Goal cards */}
       <div className="space-y-4">
         {goals.map((goal) => (
-          <motion.div key={goal.id} layout
-            className="rounded-2xl p-5 cursor-pointer"
-            style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
-            onClick={() => setExpanded(expanded === goal.id ? null : goal.id)}>
+          <motion.div key={goal.id} layout className="card-modern cursor-pointer" onClick={() => setExpanded(expanded === goal.id ? null : goal.id)} whileHover={{ y: -4 }}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-sm">{goal.title}</h3>
@@ -153,15 +150,12 @@ export default function GoalsPage() {
                   <p className="text-xs font-medium mb-2" style={{ color: "var(--text-muted)" }}>Milestones</p>
                   {goal.milestones.map((m, idx) => (
                     <div key={idx} className="flex items-center gap-2 mb-2" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => toggleMilestone(goal.id, idx)}
-                        className="w-4 h-4 rounded border flex items-center justify-center shrink-0 text-[8px]"
-                        style={{
-                          borderColor: m.done ? "var(--accent)" : "var(--border)",
-                          background: m.done ? "var(--accent)" : "transparent",
-                          color: "#000",
-                        }}>
-                        {m.done && "✓"}
-                      </button>
+                      <CircleCheckbox
+                        checked={m.done}
+                        onChange={() => toggleMilestone(goal.id, idx)}
+                        size={18}
+                        color="var(--accent)"
+                      />
                       <span className="text-xs" style={{
                         color: m.done ? "var(--text-muted)" : "var(--text-secondary)",
                         textDecoration: m.done ? "line-through" : "none",
